@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ForMyHeart</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- صفحه‌ی ورود اولیه: انتخاب هویت -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-heart">❤️</div>
+    <h1>ForMyHeart</h1>
+    <p>قبل از شروع، بگو تو کدوم‌یکی هستی و اسمت چیه.<br>این فقط یک‌بار توی همین گوشی پرسیده می‌شه.</p>
+
+    <div class="field">
+      <label>اسمت رو بنویس</label>
+      <input id="name-input" type="text" placeholder="مثلاً: مریم" maxlength="20">
+    </div>
+
+    <div class="field">
+      <label>تو کدوم نفری؟</label>
+      <div class="role-pick">
+        <button class="role-btn" data-role="person1">نفر اول</button>
+        <button class="role-btn" data-role="person2">نفر دوم</button>
+      </div>
+    </div>
+
+    <button class="primary-btn" id="setup-confirm" disabled>شروع کن</button>
+  </div>
+</div>
+
+<!-- اپلیکیشن اصلی -->
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="brand-mark">❤️</div>
+      <div>
+        <h2>ForMyHeart</h2>
+        <span id="partner-status">در انتظار اتصال...</span>
+      </div>
+    </div>
+    <div class="total-hearts">❤️ <span id="total-heart-count">0</span></div>
+  </header>
+
+  <div id="feed">
+    <div class="empty-state" id="empty-state">
+      هنوز چیزی رد و بدل نشده 🤍<br>
+      یه قلب بفرست، یا یه پیام بنویس...
+    </div>
+  </div>
+
+  <div id="composer">
+    <button class="icon-btn" id="surprise-open-btn" title="Surprise">🎁</button>
+    <button class="icon-btn" id="photo-btn" title="ارسال عکس">📷</button>
+    <input type="file" id="photo-input" accept="image/*" class="hidden-file-input">
+    <textarea id="text-input" rows="1" placeholder="یه پیام بنویس..."></textarea>
+    <button class="icon-btn" id="send-btn" title="ارسال">➤</button>
+    <button class="icon-btn" id="heart-btn" title="نگه دار برای قلب پشت‌سرهم">
+      ❤️
+      <span class="pending-badge" id="pending-badge">0</span>
+    </button>
+  </div>
+</div>
+
+<!-- مودال Surprise -->
+<div class="modal-overlay" id="surprise-modal">
+  <div class="modal-sheet">
+    <h3>🎁 یه سورپرایز کوچیک</h3>
+    <div class="mode-toggle">
+      <button id="mode-random" class="active">متن تصادفی</button>
+      <button id="mode-custom">متن دلخواه من</button>
+    </div>
+    <div class="surprise-preview" id="surprise-preview-wrap">
+      <span id="surprise-random-text">دکمه‌ی «متن جدید» رو بزن تا یه متن قشنگ ببینی ✨</span>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost-btn" id="surprise-shuffle">🔀 متن جدید</button>
+      <button class="primary-btn" id="surprise-send" style="flex:1.3;">ارسال</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="surprise-texts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

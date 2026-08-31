@@ -1,13 +1,13 @@
 /* ============================================================
-   ForMyHeart — app.js
-   با سیستم قفل دو مرحله‌ای (ماشین‌حساب + رمز دوم)
+   ForMyHeart — app.js (نسخه‌ی ساده‌شده، بدون وب‌سوکت)
+   به‌جای Firebase SDK، مستقیم با HTTP معمولی (fetch) به
+   Realtime Database وصل می‌شه. هر ۲.۵ ثانیه یه‌بار چک می‌کنه
+   پیام جدیدی اومده یا نه. این روش پشت VPN و شبکه‌های محدود
+   خیلی پایدارتر از اتصال زنده‌ی وب‌سوکته.
    ============================================================ */
 
 const MESSAGES_URL = FIREBASE_DB_URL + "/messages.json";
-
-// ---------- تنظیمات قفل (اینجا می‌تونی عوض کنی) ----------
-const CALC_PIN = "2580";        // پین ماشین‌حساب
-const SECOND_PASS = "love";     // رمز دوم
+const PRESENCE_URL = FIREBASE_DB_URL + "/presence.json";
 
 // ---------- هویت کاربر ----------
 let myRole  = localStorage.getItem("fmh_role")  || null;
@@ -15,170 +15,13 @@ let myName  = localStorage.getItem("fmh_name")  || null;
 let partnerRole = null;
 let partnerName = null;
 
-// ---------- عناصر قفل ----------
-const calcScreen   = document.getElementById("calc-screen");
-const passScreen   = document.getElementById("pass-screen");
-const setupScreen  = document.getElementById("setup-screen");
-const appEl        = document.getElementById("app");
-const secretDot    = document.getElementById("secret-dot");
-const calcDisplay  = document.getElementById("calc-display");
+const setupScreen = document.getElementById("setup-screen");
+const appEl       = document.getElementById("app");
 
-// وضعیت قفل
-let pinUnlocked = false;   // آیا پین ماشین‌حساب درست زده شده؟
+function otherRole(role){ return role === "person1" ? "person2" : "person1"; }
 
-// ---------- ماشین‌حساب ----------
-let current = "0";
-let operator = null;
-let previous = null;
-let waitingForOperand = false;
-
-function updateDisplay() {
-  calcDisplay.textContent = current;
-}
-
-function inputDigit(digit) {
-  if (waitingForOperand) {
-    current = digit;
-    waitingForOperand = false;
-  } else {
-    current = current === "0" ? digit : current + digit;
-  }
-  updateDisplay();
-}
-
-function inputDot() {
-  if (waitingForOperand) {
-    current = "0.";
-    waitingForOperand = false;
-  } else if (!current.includes(".")) {
-    current += ".";
-  }
-  updateDisplay();
-}
-
-function clearAll() {
-  current = "0";
-  operator = null;
-  previous = null;
-  waitingForOperand = false;
-  updateDisplay();
-}
-
-function toggleSign() {
-  current = (parseFloat(current) * -1).toString();
-  updateDisplay();
-}
-
-function inputPercent() {
-  current = (parseFloat(current) / 100).toString();
-  updateDisplay();
-}
-
-function performOperation(nextOp) {
-  const inputValue = parseFloat(current);
-
-  if (previous === null) {
-    previous = inputValue;
-  } else if (operator) {
-    const result = calculate(previous, inputValue, operator);
-    current = String(result);
-    previous = result;
-    updateDisplay();
-  }
-
-  waitingForOperand = true;
-  operator = nextOp;
-}
-
-function calculate(a, b, op) {
-  switch (op) {
-    case "+": return a + b;
-    case "-": return a - b;
-    case "*": return a * b;
-    case "/": return b !== 0 ? a / b : 0;
-    default: return b;
-  }
-}
-
-function handleEquals() {
-  // چک کردن پین مخفی
-  if (current === CALC_PIN) {
-    pinUnlocked = true;
-    secretDot.classList.add("active");   // فقط نقطه‌ی کوچیک روشن می‌شه
-    // هیچ پیام یا انیمیشن دیگه‌ای نشون نمی‌دیم
-    clearAll();
-    return;
-  }
-
-  // محاسبه‌ی عادی
-  if (operator && previous !== null) {
-    const result = calculate(previous, parseFloat(current), operator);
-    current = String(result);
-    operator = null;
-    previous = null;
-    waitingForOperand = true;
-    updateDisplay();
-  }
-}
-
-// دکمه‌های ماشین‌حساب
-document.querySelectorAll(".calc-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const key = btn.dataset.key;
-
-    if (!isNaN(key)) {
-      inputDigit(key);
-    } else if (key === ".") {
-      inputDot();
-    } else if (key === "C") {
-      clearAll();
-    } else if (key === "±") {
-      toggleSign();
-    } else if (key === "%") {
-      inputPercent();
-    } else if (key === "=") {
-      handleEquals();
-    } else {
-      // عملگرها
-      performOperation(key);
-    }
-  });
-});
-
-// کلیک روی نقطه‌ی مخفی
-secretDot.addEventListener("click", () => {
-  if (pinUnlocked) {
-    // رفتن به صفحه‌ی رمز دوم
-    calcScreen.style.display = "none";
-    passScreen.style.display = "flex";
-    document.getElementById("second-pass").focus();
-  }
-});
-
-// ---------- رمز دوم ----------
-document.getElementById("pass-confirm").addEventListener("click", checkSecondPass);
-document.getElementById("second-pass").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") checkSecondPass();
-});
-
-function checkSecondPass() {
-  const val = document.getElementById("second-pass").value.trim();
-  const errorEl = document.getElementById("pass-error");
-
-  if (val === SECOND_PASS) {
-    // قفل کامل باز شد
-    passScreen.style.display = "none";
-    bootApp();
-  } else {
-    errorEl.textContent = "رمز اشتباه است";
-    document.getElementById("second-pass").value = "";
-    setTimeout(() => errorEl.textContent = "", 2000);
-  }
-}
-
-// ---------- شروع اپ اصلی بعد از باز شدن قفل ----------
-function bootApp() {
-  if (myRole && myName) {
+function boot(){
+  if(myRole && myName){
     partnerRole = otherRole(myRole);
     setupScreen.style.display = "none";
     appEl.style.display = "flex";
@@ -189,8 +32,6 @@ function bootApp() {
     wireSetupScreen();
   }
 }
-
-function otherRole(role){ return role === "person1" ? "person2" : "person1"; }
 
 function wireSetupScreen(){
   const nameInput   = document.getElementById("name-input");
@@ -217,13 +58,13 @@ function wireSetupScreen(){
     myRole = chosenRole;
     localStorage.setItem("fmh_name", myName);
     localStorage.setItem("fmh_role", myRole);
-    bootApp();
+    boot();
   });
 }
 
 // ---------- شروع اپ اصلی ----------
 function startApp(){
-  document.getElementById("partner-status").textContent = "منتظر " + (partnerRole === "person1" ? "نفر اول" : "نفر دوم") + "...";
+  document.getElementById("partner-status-text").textContent = "منتظر " + (partnerRole === "person1" ? "نفر اول" : "نفر دوم") + "...";
   wireComposer();
   wireHeartButton();
   wireSurpriseModal();
@@ -253,7 +94,7 @@ function renderMessage(msg){
   } else if(msg.type === "heart"){
     bubble.classList.add("heart-burst");
     const who = msg.from === myRole ? "بهش" : "بهت";
-    bubble.textContent = `${msg.fromName || "این آدم"} این‌قدر قلب \( {who} داد ❤️  × \){msg.count}`;
+    bubble.textContent = `${msg.fromName || "این آدم"} این‌قدر قلب ${who} داد ❤️  ×${msg.count}`;
   } else if(msg.type === "surprise"){
     bubble.classList.add("surprise");
     bubble.innerHTML = `<span class="surprise-tag">🎁 SURPRISE</span>`;
@@ -277,7 +118,7 @@ function renderMessage(msg){
   feed.scrollTop = feed.scrollHeight;
 }
 
-// ---------- Polling ----------
+// ---------- Polling: هر ۲.۵ ثانیه چک می‌کنه پیام جدید اومده یا نه ----------
 let pollFailCount = 0;
 
 async function pollMessages(){
@@ -287,7 +128,7 @@ async function pollMessages(){
     const data = await res.json();
     pollFailCount = 0;
 
-    if(!data) return;
+    if(!data) return; // هنوز هیچ پیامی نیست
 
     const entries = Object.entries(data).sort((a,b)=> (a[1].time||0) - (b[1].time||0));
 
@@ -313,7 +154,7 @@ async function pollMessages(){
     newOnes.forEach(msg=>{
       if(msg.from === partnerRole){
         partnerName = msg.fromName || partnerName;
-        document.getElementById("partner-status").textContent = "با " + partnerName + " در ارتباطی 💫";
+        document.getElementById("partner-status-text").textContent = "با " + partnerName + " در ارتباطی 💫";
       }
       renderMessage(msg);
     });
@@ -329,10 +170,42 @@ async function pollMessages(){
 
 function startPolling(){
   pollMessages();
+  pingPresence();
+  checkPartnerPresence();
   setInterval(pollMessages, 1000);
+  setInterval(pingPresence, 4000);
+  setInterval(checkPartnerPresence, 4000);
 }
 
-// ---------- ارسال پیام ----------
+// ---------- وضعیت آنلاین بودن ----------
+async function pingPresence(){
+  try{
+    await fetch(FIREBASE_DB_URL + "/presence/" + myRole + ".json", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(Date.now())
+    });
+  } catch(err){
+    // اگه پینگ آنلاین بودن با مشکل مواجه بشه، مهم نیست، فقط لاگ می‌کنیم
+    console.warn("Presence ping failed:", err);
+  }
+}
+
+async function checkPartnerPresence(){
+  try{
+    const res = await fetch(FIREBASE_DB_URL + "/presence/" + partnerRole + ".json", {cache:"no-store"});
+    if(!res.ok) return;
+    const lastSeen = await res.json();
+    const dot = document.getElementById("online-dot");
+    if(!dot) return;
+    const isOnline = lastSeen && (Date.now() - lastSeen < 8000);
+    dot.classList.toggle("online", !!isOnline);
+  } catch(err){
+    console.warn("Presence check failed:", err);
+  }
+}
+
+// ---------- ارسال پیام (REST ساده) ----------
 async function pushMessage(data){
   const payload = {
     from: myRole,
@@ -363,7 +236,7 @@ async function pushMessage(data){
   }
 }
 
-// ---------- نوار ارسال ----------
+// ---------- نوار ارسال: متن ----------
 function wireComposer(){
   const textInput = document.getElementById("text-input");
   const sendBtn   = document.getElementById("send-btn");
@@ -406,39 +279,70 @@ function handlePhoto(e){
   if(!file) return;
   if(!file.type.startsWith("image/")){
     showToast("فقط عکس قابل ارساله");
+    e.target.value = "";
     return;
   }
 
+  showToast("در حال آماده‌سازی عکس...");
+
   const reader = new FileReader();
+
+  reader.onerror = ()=>{
+    showToast("خوندن فایل عکس با خطا مواجه شد");
+  };
+
   reader.onload = (ev)=>{
     const img = new Image();
-    img.onload = ()=>{
-      const maxDim = 1080;
-      let {width, height} = img;
-      if(width > maxDim || height > maxDim){
-        const ratio = Math.min(maxDim/width, maxDim/height);
-        width = Math.round(width*ratio);
-        height = Math.round(height*ratio);
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
 
-      if(dataUrl.length > 900000){
-        showToast("این عکس خیلی سنگینه، یه عکس دیگه امتحان کن");
-        return;
-      }
-      pushMessage({type:"photo", content: dataUrl});
+    img.onerror = ()=>{
+      showToast("این عکس قابل پردازش نیست، یه عکس دیگه امتحان کن");
     };
+
+    img.onload = ()=>{
+      try{
+        const maxDim = 1080;
+        let {width, height} = img;
+        if(width > maxDim || height > maxDim){
+          const ratio = Math.min(maxDim/width, maxDim/height);
+          width = Math.round(width*ratio);
+          height = Math.round(height*ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if(!ctx) throw new Error("canvas context not available");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // اگه با کیفیت اول هنوز سنگین بود، چندبار کیفیت رو کم‌تر می‌کنیم
+        // تا جا بشه، به‌جای اینکه فقط رد کنیم
+        let quality = 0.72;
+        let dataUrl = canvas.toDataURL("image/jpeg", quality);
+        let attempts = 0;
+        while(dataUrl.length > 900000 && attempts < 5){
+          quality -= 0.12;
+          dataUrl = canvas.toDataURL("image/jpeg", Math.max(quality, 0.2));
+          attempts++;
+        }
+
+        if(dataUrl.length > 900000){
+          showToast("این عکس حتی با فشرده‌سازی هم خیلی سنگینه، یه عکس دیگه امتحان کن");
+          return;
+        }
+        pushMessage({type:"photo", content: dataUrl});
+      } catch(err){
+        console.error("Photo processing failed:", err);
+        showToast("پردازش عکس با خطا مواجه شد: " + (err.message || "نامشخص"));
+      }
+    };
+
     img.src = ev.target.result;
   };
+
   reader.readAsDataURL(file);
   e.target.value = "";
 }
 
-// ---------- دکمه‌ی قلب ----------
+// ---------- دکمه‌ی قلب (batching سه‌ثانیه‌ای) ----------
 function wireHeartButton(){
   const heartBtn = document.getElementById("heart-btn");
   const badge = document.getElementById("pending-badge");
@@ -547,5 +451,6 @@ function wireSurpriseModal(){
 }
 
 // ---------- شروع ----------
-// اول ماشین‌حساب نشون داده می‌شه
-// بعد از باز شدن قفل، bootApp() صدا زده می‌شه
+// این دیگه خودکار اجرا نمی‌شه — بعد از رد شدن موفق از قفل ماشین‌حساب/چهره،
+// lock.js این تابع رو صدا می‌زنه تا اپ واقعی باز بشه
+window.unlockRealApp = boot;

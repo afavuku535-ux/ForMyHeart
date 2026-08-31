@@ -1,93 +1,137 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ForMyHeart</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Calculator</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- صفحه‌ی ورود اولیه: انتخاب هویت -->
-<div id="setup-screen">
-  <div class="setup-card">
-    <div class="setup-heart">❤️</div>
-    <h1>ForMyHeart</h1>
-    <p>قبل از شروع، بگو تو کدوم‌یکی هستی و اسمت چیه.<br>این فقط یک‌بار توی همین گوشی پرسیده می‌شه.</p>
+  <!-- ========== صفحه ماشین‌حساب (قفل اول) ========== -->
+  <div id="calc-screen">
+    <div class="calc-display" id="calc-display">0</div>
+    <div class="calc-keys">
+      <button class="calc-btn func" data-key="C">C</button>
+      <button class="calc-btn func" data-key="±">±</button>
+      <button class="calc-btn func" data-key="%">%</button>
+      <button class="calc-btn op" data-key="/">÷</button>
 
-    <div class="field">
-      <label>اسمت رو بنویس</label>
-      <input id="name-input" type="text" placeholder="مثلاً: مریم" maxlength="20">
+      <button class="calc-btn" data-key="7">7</button>
+      <button class="calc-btn" data-key="8">8</button>
+      <button class="calc-btn" data-key="9">9</button>
+      <button class="calc-btn op" data-key="*">×</button>
+
+      <button class="calc-btn" data-key="4">4</button>
+      <button class="calc-btn" data-key="5">5</button>
+      <button class="calc-btn" data-key="6">6</button>
+      <button class="calc-btn op" data-key="-">−</button>
+
+      <button class="calc-btn" data-key="1">1</button>
+      <button class="calc-btn" data-key="2">2</button>
+      <button class="calc-btn" data-key="3">3</button>
+      <button class="calc-btn op" data-key="+">+</button>
+
+      <button class="calc-btn zero" data-key="0">0</button>
+      <button class="calc-btn" data-key=".">.</button>
+      <button class="calc-btn equals" data-key="=">=</button>
     </div>
 
-    <div class="field">
-      <label>تو کدوم نفری؟</label>
-      <div class="role-pick">
-        <button class="role-btn" data-role="person1">نفر اول</button>
-        <button class="role-btn" data-role="person2">نفر دوم</button>
+    <!-- علامت خیلی خیلی کوچیک (گوشه پایین راست) -->
+    <div id="secret-dot"></div>
+  </div>
+
+  <!-- ========== صفحه رمز دوم ========== -->
+  <div id="pass-screen" style="display:none;">
+    <div class="pass-card">
+      <div class="pass-heart">❤️</div>
+      <h2>تأیید هویت</h2>
+      <p>رمز دوم را وارد کنید</p>
+      <input type="password" id="second-pass" placeholder="رمز..." maxlength="20" autocomplete="off">
+      <button class="primary-btn" id="pass-confirm">ورود</button>
+      <p class="pass-hint" id="pass-error"></p>
+    </div>
+  </div>
+
+  <!-- ========== صفحه‌ی ورود اولیه اصلی ========== -->
+  <div id="setup-screen" style="display:none;">
+    <div class="setup-card">
+      <div class="setup-heart">❤️</div>
+      <h1>ForMyHeart</h1>
+      <p>قبل از شروع، بگو تو کدوم‌یکی هستی و اسمت چیه.<br>این فقط یک‌بار توی همین گوشی پرسیده می‌شه.</p>
+
+      <div class="field">
+        <label>اسمت رو بنویس</label>
+        <input id="name-input" type="text" placeholder="مثلاً: مریم" maxlength="20">
+      </div>
+
+      <div class="field">
+        <label>تو کدوم نفری؟</label>
+        <div class="role-pick">
+          <button class="role-btn" data-role="person1">نفر اول</button>
+          <button class="role-btn" data-role="person2">نفر دوم</button>
+        </div>
+      </div>
+
+      <button class="primary-btn" id="setup-confirm" disabled>شروع کن</button>
+    </div>
+  </div>
+
+  <!-- ========== اپلیکیشن اصلی ========== -->
+  <div id="app" style="display:none;">
+    <header>
+      <div class="brand">
+        <div class="brand-mark">❤️</div>
+        <div>
+          <h2>ForMyHeart</h2>
+          <span id="partner-status">در انتظار اتصال...</span>
+        </div>
+      </div>
+      <div class="total-hearts">❤️ <span id="total-heart-count">0</span></div>
+    </header>
+
+    <div id="feed">
+      <div class="empty-state" id="empty-state">
+        هنوز چیزی رد و بدل نشده 🤍<br>
+        یه قلب بفرست، یا یه پیام بنویس...
       </div>
     </div>
 
-    <button class="primary-btn" id="setup-confirm" disabled>شروع کن</button>
+    <div id="composer">
+      <button class="icon-btn" id="surprise-open-btn" title="Surprise">🎁</button>
+      <button class="icon-btn" id="photo-btn" title="ارسال عکس">📷</button>
+      <input type="file" id="photo-input" accept="image/*" class="hidden-file-input">
+      <textarea id="text-input" rows="1" placeholder="یه پیام بنویس..."></textarea>
+      <button class="icon-btn" id="send-btn" title="ارسال">➤</button>
+      <button class="icon-btn" id="heart-btn" title="نگه دار برای قلب پشت‌سرهم">
+        ❤️
+        <span class="pending-badge" id="pending-badge">0</span>
+      </button>
+    </div>
   </div>
-</div>
 
-<!-- اپلیکیشن اصلی -->
-<div id="app">
-  <header>
-    <div class="brand">
-      <div class="brand-mark">❤️</div>
-      <div>
-        <h2>ForMyHeart</h2>
-        <span id="partner-status">در انتظار اتصال...</span>
+  <!-- مودال Surprise -->
+  <div class="modal-overlay" id="surprise-modal">
+    <div class="modal-sheet">
+      <h3>🎁 یه سورپرایز کوچیک</h3>
+      <div class="mode-toggle">
+        <button id="mode-random" class="active">متن تصادفی</button>
+        <button id="mode-custom">متن دلخواه من</button>
+      </div>
+      <div class="surprise-preview" id="surprise-preview-wrap">
+        <span id="surprise-random-text">دکمه‌ی «متن جدید» رو بزن تا یه متن قشنگ ببینی ✨</span>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="surprise-shuffle">🔀 متن جدید</button>
+        <button class="primary-btn" id="surprise-send" style="flex:1.3;">ارسال</button>
       </div>
     </div>
-    <div class="total-hearts">❤️ <span id="total-heart-count">0</span></div>
-  </header>
-
-  <div id="feed">
-    <div class="empty-state" id="empty-state">
-      هنوز چیزی رد و بدل نشده 🤍<br>
-      یه قلب بفرست، یا یه پیام بنویس...
-    </div>
   </div>
 
-  <div id="composer">
-    <button class="icon-btn" id="surprise-open-btn" title="Surprise">🎁</button>
-    <button class="icon-btn" id="photo-btn" title="ارسال عکس">📷</button>
-    <input type="file" id="photo-input" accept="image/*" class="hidden-file-input">
-    <textarea id="text-input" rows="1" placeholder="یه پیام بنویس..."></textarea>
-    <button class="icon-btn" id="send-btn" title="ارسال">➤</button>
-    <button class="icon-btn" id="heart-btn" title="نگه دار برای قلب پشت‌سرهم">
-      ❤️
-      <span class="pending-badge" id="pending-badge">0</span>
-    </button>
-  </div>
-</div>
+  <div class="toast" id="toast"></div>
 
-<!-- مودال Surprise -->
-<div class="modal-overlay" id="surprise-modal">
-  <div class="modal-sheet">
-    <h3>🎁 یه سورپرایز کوچیک</h3>
-    <div class="mode-toggle">
-      <button id="mode-random" class="active">متن تصادفی</button>
-      <button id="mode-custom">متن دلخواه من</button>
-    </div>
-    <div class="surprise-preview" id="surprise-preview-wrap">
-      <span id="surprise-random-text">دکمه‌ی «متن جدید» رو بزن تا یه متن قشنگ ببینی ✨</span>
-    </div>
-    <div class="modal-actions">
-      <button class="ghost-btn" id="surprise-shuffle">🔀 متن جدید</button>
-      <button class="primary-btn" id="surprise-send" style="flex:1.3;">ارسال</button>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<script src="firebase-config.js"></script>
-<script src="surprise-texts.js"></script>
-<script src="app.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="surprise-texts.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
-

@@ -1,31 +1,12 @@
 /* ============================================================
-   ForMyHeart — app.js
-   منطق کامل برنامه: هویت، پیام‌ها، قلب‌های دسته‌ای، سورپرایز، عکس
+   ForMyHeart — app.js (نسخه‌ی ساده‌شده، بدون وب‌سوکت)
+   به‌جای Firebase SDK، مستقیم با HTTP معمولی (fetch) به
+   Realtime Database وصل می‌شه. هر ۲.۵ ثانیه یه‌بار چک می‌کنه
+   پیام جدیدی اومده یا نه. این روش پشت VPN و شبکه‌های محدود
+   خیلی پایدارتر از اتصال زنده‌ی وب‌سوکته.
    ============================================================ */
 
-// ---------- Firebase ----------
-// این بخش داخل try/catch گذاشته شده تا اگه فایربیس به هر دلیلی
-// (اینترنت، VPN، مسدود بودن CDN) وصل نشد، کل برنامه از کار نیفته
-// و حداقل صفحه‌ی انتخاب اسم/نفر باز بمونه و یه پیام واضح نشون بده.
-let db = null;
-let messagesRef = null;
-let firebaseReady = false;
-
-function initFirebase(){
-  try{
-    if(typeof firebase === "undefined"){
-      throw new Error("Firebase SDK لود نشد (احتمالاً مشکل اینترنت/VPN)");
-    }
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-    messagesRef = db.ref("messages");
-    firebaseReady = true;
-  } catch(err){
-    console.error("Firebase init failed:", err);
-    firebaseReady = false;
-    showToast("اتصال به دیتابیس برقرار نشد. اینترنت یا VPN رو چک کن و صفحه رو رفرش کن.");
-  }
-}
+const MESSAGES_URL = FIREBASE_DB_URL + "/messages.json";
 
 // ---------- هویت کاربر ----------
 let myRole  = localStorage.getItem("fmh_role")  || null;
@@ -39,18 +20,15 @@ const appEl       = document.getElementById("app");
 function otherRole(role){ return role === "person1" ? "person2" : "person1"; }
 
 function boot(){
-  // صفحه‌ی انتخاب اسم/نفر همیشه اول وایر می‌شه، مستقل از وضعیت فایربیس
   if(myRole && myName){
     partnerRole = otherRole(myRole);
     setupScreen.style.display = "none";
     appEl.style.display = "flex";
-    initFirebase();
     startApp();
   } else {
     setupScreen.style.display = "flex";
     appEl.style.display = "none";
     wireSetupScreen();
-    initFirebase(); // زودتر تلاش می‌کنیم وصل بشیم تا وقتی نفر تأیید کرد آماده باشه
   }
 }
 
@@ -86,40 +64,16 @@ function wireSetupScreen(){
 // ---------- شروع اپ اصلی ----------
 function startApp(){
   document.getElementById("partner-status").textContent = "منتظر " + (partnerRole === "person1" ? "نفر اول" : "نفر دوم") + "...";
-  listenForMessages();
   wireComposer();
   wireHeartButton();
   wireSurpriseModal();
+  startPolling();
 }
 
 // ---------- نمایش پیام‌ها ----------
 const feed = document.getElementById("feed");
 const emptyState = document.getElementById("empty-state");
-let totalHearts = 0;
-
-function listenForMessages(){
-  if(!firebaseReady){
-    showToast("اتصال به دیتابیس برقرار نیست. صفحه رو رفرش کن.");
-    return;
-  }
-  messagesRef.limitToLast(300).on("child_added", (snap)=>{
-    const msg = snap.val();
-    if(!msg) return;
-    if(emptyState) emptyState.remove();
-
-    if(msg.from === partnerRole){
-      partnerName = msg.fromName || partnerName;
-      document.getElementById("partner-status").textContent = "با " + partnerName + " در ارتباطی 💫";
-    }
-
-    if(msg.type === "heart"){
-      totalHearts += (msg.count || 0);
-      document.getElementById("total-heart-count").textContent = totalHearts;
-    }
-
-    renderMessage(msg);
-  });
-}
+const renderedIds = new Set();
 
 function timeLabel(ts){
   if(!ts) return "";
@@ -163,18 +117,90 @@ function renderMessage(msg){
   feed.scrollTop = feed.scrollHeight;
 }
 
-// ---------- ارسال به فایربیس ----------
-function pushMessage(data){
-  if(!firebaseReady){
-    showToast("اتصال به دیتابیس برقرار نیست. صفحه رو رفرش کن.");
-    return;
+// ---------- Polling: هر ۲.۵ ثانیه چک می‌کنه پیام جدید اومده یا نه ----------
+let pollFailCount = 0;
+
+async function pollMessages(){
+  try{
+    const res = await fetch(MESSAGES_URL, {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    pollFailCount = 0;
+
+    if(!data) return; // هنوز هیچ پیامی نیست
+
+    const entries = Object.entries(data).sort((a,b)=> (a[1].time||0) - (b[1].time||0));
+
+    let totalHearts = 0;
+    let newOnes = [];
+
+    for(const [id, msg] of entries){
+      if(msg.type === "heart"){
+        totalHearts += (msg.count || 0);
+      }
+      if(!renderedIds.has(id)){
+        renderedIds.add(id);
+        newOnes.push(msg);
+      }
+    }
+
+    document.getElementById("total-heart-count").textContent = totalHearts;
+
+    if(newOnes.length > 0 && emptyState){
+      emptyState.remove();
+    }
+
+    newOnes.forEach(msg=>{
+      if(msg.from === partnerRole){
+        partnerName = msg.fromName || partnerName;
+        document.getElementById("partner-status").textContent = "با " + partnerName + " در ارتباطی 💫";
+      }
+      renderMessage(msg);
+    });
+
+  } catch(err){
+    pollFailCount++;
+    console.error("Poll error:", err);
+    if(pollFailCount === 3){
+      showToast("اتصال به دیتابیس برقرار نمی‌شه. اینترنت/VPN رو چک کن.");
+    }
   }
-  messagesRef.push({
+}
+
+function startPolling(){
+  pollMessages();
+  setInterval(pollMessages, 2500);
+}
+
+// ---------- ارسال پیام (REST ساده) ----------
+async function pushMessage(data){
+  const payload = {
     from: myRole,
     fromName: myName,
-    time: firebase.database.ServerValue.TIMESTAMP,
+    time: Date.now(),
     ...data
-  });
+  };
+  try{
+    const res = await fetch(MESSAGES_URL, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const result = await res.json();
+    if(result && result.name && !renderedIds.has(result.name)){
+      renderedIds.add(result.name);
+      if(emptyState) emptyState.remove();
+      renderMessage(payload);
+      if(payload.type === "heart"){
+        const cur = parseInt(document.getElementById("total-heart-count").textContent || "0", 10);
+        document.getElementById("total-heart-count").textContent = cur + payload.count;
+      }
+    }
+  } catch(err){
+    console.error("Push failed:", err);
+    showToast("ارسال ناموفق بود، دوباره امتحان کن.");
+  }
 }
 
 // ---------- نوار ارسال: متن ----------
@@ -212,7 +238,7 @@ function showToast(msg){
   const toast = document.getElementById("toast");
   toast.textContent = msg;
   toast.classList.add("show");
-  setTimeout(()=> toast.classList.remove("show"), 2200);
+  setTimeout(()=> toast.classList.remove("show"), 2500);
 }
 
 function handlePhoto(e){
@@ -227,7 +253,6 @@ function handlePhoto(e){
   reader.onload = (ev)=>{
     const img = new Image();
     img.onload = ()=>{
-      // فشرده‌سازی: حداکثر ابعاد ۱۰۸۰px و کیفیت ۰.۷۲ برای اینکه داخل Realtime Database جا بشه
       const maxDim = 1080;
       let {width, height} = img;
       if(width > maxDim || height > maxDim){
@@ -241,7 +266,6 @@ function handlePhoto(e){
       ctx.drawImage(img, 0, 0, width, height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
 
-      // Realtime DB برای هر مقدار محدودیت داره؛ برای اطمینان زیر ~900KB نگه می‌داریم
       if(dataUrl.length > 900000){
         showToast("این عکس خیلی سنگینه، یه عکس دیگه امتحان کن");
         return;
@@ -292,7 +316,6 @@ function wireHeartButton(){
     timer = setTimeout(flush, 3000);
   });
 
-  // اگه کاربر صفحه رو ببنده یا از تب خارج بشه، هرچی مونده رو بفرست
   window.addEventListener("beforeunload", flush);
   document.addEventListener("visibilitychange", ()=>{
     if(document.hidden) flush();

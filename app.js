@@ -1,12 +1,13 @@
 /* ============================================================
-   ForMyHeart — app.js (نسخه‌ی ساده‌شده، بدون وب‌سوکت)
-   به‌جای Firebase SDK، مستقیم با HTTP معمولی (fetch) به
-   Realtime Database وصل می‌شه. هر ۲.۵ ثانیه یه‌بار چک می‌کنه
-   پیام جدیدی اومده یا نه. این روش پشت VPN و شبکه‌های محدود
-   خیلی پایدارتر از اتصال زنده‌ی وب‌سوکته.
+   ForMyHeart — app.js
+   با سیستم قفل دو مرحله‌ای (ماشین‌حساب + رمز دوم)
    ============================================================ */
 
 const MESSAGES_URL = FIREBASE_DB_URL + "/messages.json";
+
+// ---------- تنظیمات قفل (اینجا می‌تونی عوض کنی) ----------
+const CALC_PIN = "2580";        // پین ماشین‌حساب
+const SECOND_PASS = "love";     // رمز دوم
 
 // ---------- هویت کاربر ----------
 let myRole  = localStorage.getItem("fmh_role")  || null;
@@ -14,13 +15,170 @@ let myName  = localStorage.getItem("fmh_name")  || null;
 let partnerRole = null;
 let partnerName = null;
 
-const setupScreen = document.getElementById("setup-screen");
-const appEl       = document.getElementById("app");
+// ---------- عناصر قفل ----------
+const calcScreen   = document.getElementById("calc-screen");
+const passScreen   = document.getElementById("pass-screen");
+const setupScreen  = document.getElementById("setup-screen");
+const appEl        = document.getElementById("app");
+const secretDot    = document.getElementById("secret-dot");
+const calcDisplay  = document.getElementById("calc-display");
 
-function otherRole(role){ return role === "person1" ? "person2" : "person1"; }
+// وضعیت قفل
+let pinUnlocked = false;   // آیا پین ماشین‌حساب درست زده شده؟
 
-function boot(){
-  if(myRole && myName){
+// ---------- ماشین‌حساب ----------
+let current = "0";
+let operator = null;
+let previous = null;
+let waitingForOperand = false;
+
+function updateDisplay() {
+  calcDisplay.textContent = current;
+}
+
+function inputDigit(digit) {
+  if (waitingForOperand) {
+    current = digit;
+    waitingForOperand = false;
+  } else {
+    current = current === "0" ? digit : current + digit;
+  }
+  updateDisplay();
+}
+
+function inputDot() {
+  if (waitingForOperand) {
+    current = "0.";
+    waitingForOperand = false;
+  } else if (!current.includes(".")) {
+    current += ".";
+  }
+  updateDisplay();
+}
+
+function clearAll() {
+  current = "0";
+  operator = null;
+  previous = null;
+  waitingForOperand = false;
+  updateDisplay();
+}
+
+function toggleSign() {
+  current = (parseFloat(current) * -1).toString();
+  updateDisplay();
+}
+
+function inputPercent() {
+  current = (parseFloat(current) / 100).toString();
+  updateDisplay();
+}
+
+function performOperation(nextOp) {
+  const inputValue = parseFloat(current);
+
+  if (previous === null) {
+    previous = inputValue;
+  } else if (operator) {
+    const result = calculate(previous, inputValue, operator);
+    current = String(result);
+    previous = result;
+    updateDisplay();
+  }
+
+  waitingForOperand = true;
+  operator = nextOp;
+}
+
+function calculate(a, b, op) {
+  switch (op) {
+    case "+": return a + b;
+    case "-": return a - b;
+    case "*": return a * b;
+    case "/": return b !== 0 ? a / b : 0;
+    default: return b;
+  }
+}
+
+function handleEquals() {
+  // چک کردن پین مخفی
+  if (current === CALC_PIN) {
+    pinUnlocked = true;
+    secretDot.classList.add("active");   // فقط نقطه‌ی کوچیک روشن می‌شه
+    // هیچ پیام یا انیمیشن دیگه‌ای نشون نمی‌دیم
+    clearAll();
+    return;
+  }
+
+  // محاسبه‌ی عادی
+  if (operator && previous !== null) {
+    const result = calculate(previous, parseFloat(current), operator);
+    current = String(result);
+    operator = null;
+    previous = null;
+    waitingForOperand = true;
+    updateDisplay();
+  }
+}
+
+// دکمه‌های ماشین‌حساب
+document.querySelectorAll(".calc-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const key = btn.dataset.key;
+
+    if (!isNaN(key)) {
+      inputDigit(key);
+    } else if (key === ".") {
+      inputDot();
+    } else if (key === "C") {
+      clearAll();
+    } else if (key === "±") {
+      toggleSign();
+    } else if (key === "%") {
+      inputPercent();
+    } else if (key === "=") {
+      handleEquals();
+    } else {
+      // عملگرها
+      performOperation(key);
+    }
+  });
+});
+
+// کلیک روی نقطه‌ی مخفی
+secretDot.addEventListener("click", () => {
+  if (pinUnlocked) {
+    // رفتن به صفحه‌ی رمز دوم
+    calcScreen.style.display = "none";
+    passScreen.style.display = "flex";
+    document.getElementById("second-pass").focus();
+  }
+});
+
+// ---------- رمز دوم ----------
+document.getElementById("pass-confirm").addEventListener("click", checkSecondPass);
+document.getElementById("second-pass").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") checkSecondPass();
+});
+
+function checkSecondPass() {
+  const val = document.getElementById("second-pass").value.trim();
+  const errorEl = document.getElementById("pass-error");
+
+  if (val === SECOND_PASS) {
+    // قفل کامل باز شد
+    passScreen.style.display = "none";
+    bootApp();
+  } else {
+    errorEl.textContent = "رمز اشتباه است";
+    document.getElementById("second-pass").value = "";
+    setTimeout(() => errorEl.textContent = "", 2000);
+  }
+}
+
+// ---------- شروع اپ اصلی بعد از باز شدن قفل ----------
+function bootApp() {
+  if (myRole && myName) {
     partnerRole = otherRole(myRole);
     setupScreen.style.display = "none";
     appEl.style.display = "flex";
@@ -31,6 +189,8 @@ function boot(){
     wireSetupScreen();
   }
 }
+
+function otherRole(role){ return role === "person1" ? "person2" : "person1"; }
 
 function wireSetupScreen(){
   const nameInput   = document.getElementById("name-input");
@@ -57,7 +217,7 @@ function wireSetupScreen(){
     myRole = chosenRole;
     localStorage.setItem("fmh_name", myName);
     localStorage.setItem("fmh_role", myRole);
-    boot();
+    bootApp();
   });
 }
 
@@ -93,7 +253,7 @@ function renderMessage(msg){
   } else if(msg.type === "heart"){
     bubble.classList.add("heart-burst");
     const who = msg.from === myRole ? "بهش" : "بهت";
-    bubble.textContent = `${msg.fromName || "این آدم"} این‌قدر قلب ${who} داد ❤️  ×${msg.count}`;
+    bubble.textContent = `${msg.fromName || "این آدم"} این‌قدر قلب \( {who} داد ❤️  × \){msg.count}`;
   } else if(msg.type === "surprise"){
     bubble.classList.add("surprise");
     bubble.innerHTML = `<span class="surprise-tag">🎁 SURPRISE</span>`;
@@ -117,7 +277,7 @@ function renderMessage(msg){
   feed.scrollTop = feed.scrollHeight;
 }
 
-// ---------- Polling: هر ۲.۵ ثانیه چک می‌کنه پیام جدید اومده یا نه ----------
+// ---------- Polling ----------
 let pollFailCount = 0;
 
 async function pollMessages(){
@@ -127,7 +287,7 @@ async function pollMessages(){
     const data = await res.json();
     pollFailCount = 0;
 
-    if(!data) return; // هنوز هیچ پیامی نیست
+    if(!data) return;
 
     const entries = Object.entries(data).sort((a,b)=> (a[1].time||0) - (b[1].time||0));
 
@@ -172,7 +332,7 @@ function startPolling(){
   setInterval(pollMessages, 1000);
 }
 
-// ---------- ارسال پیام (REST ساده) ----------
+// ---------- ارسال پیام ----------
 async function pushMessage(data){
   const payload = {
     from: myRole,
@@ -203,7 +363,7 @@ async function pushMessage(data){
   }
 }
 
-// ---------- نوار ارسال: متن ----------
+// ---------- نوار ارسال ----------
 function wireComposer(){
   const textInput = document.getElementById("text-input");
   const sendBtn   = document.getElementById("send-btn");
@@ -278,7 +438,7 @@ function handlePhoto(e){
   e.target.value = "";
 }
 
-// ---------- دکمه‌ی قلب (batching سه‌ثانیه‌ای) ----------
+// ---------- دکمه‌ی قلب ----------
 function wireHeartButton(){
   const heartBtn = document.getElementById("heart-btn");
   const badge = document.getElementById("pending-badge");
@@ -387,5 +547,5 @@ function wireSurpriseModal(){
 }
 
 // ---------- شروع ----------
-boot();
-
+// اول ماشین‌حساب نشون داده می‌شه
+// بعد از باز شدن قفل، bootApp() صدا زده می‌شه

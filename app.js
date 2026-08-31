@@ -169,7 +169,7 @@ async function pollMessages(){
 
 function startPolling(){
   pollMessages();
-  setInterval(pollMessages, 2500);
+  setInterval(pollMessages, 1000);
 }
 
 // ---------- ارسال پیام (REST ساده) ----------
@@ -388,3 +388,4 @@ function wireSurpriseModal(){
 
 // ---------- شروع ----------
 boot();
+
